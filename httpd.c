@@ -212,7 +212,7 @@ int pclosesocket(int s)
 {
     return closesocket(s);
 }
-static void FdHandler(void * lpCtx)
+static void * FdHandler(void * lpCtx)
 {
     int fd = (SOCKET)lpCtx;
     deal(fd);
@@ -273,6 +273,7 @@ int main()
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <pthread.h>
+#include <unistd.h>
 
 int psend(int s, const char *buf, int len, int flags)
 {
@@ -286,9 +287,9 @@ int pclosesocket(int s)
 {
     return close(s);
 }
-void FdHandler(int fd)
+void * FdHandler(void * fd)
 {
-    deal(fd);
+    deal((long)fd);
     pthread_detach(pthread_self());
 }
 
@@ -320,7 +321,7 @@ int main(void)
         client_sock = accept(server_sock,(struct sockaddr *)&client_name,
                     &client_name_len);
         printf("from [%s:%d]\r\n", inet_ntoa(name.sin_addr), ntohs(name.sin_port));
-        pthread_create(&newthread, NULL, FdHandler, client_sock);
+        pthread_create(&newthread, NULL,FdHandler,(void *)(long) client_sock);
     }
     return (0);
 }
