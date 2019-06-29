@@ -212,7 +212,7 @@ int pclosesocket(int s)
 {
     return closesocket(s);
 }
-static void * FdHandler(void * lpCtx)
+static void FdHandler(void * lpCtx)
 {
     int fd = (SOCKET)lpCtx;
     deal(fd);
