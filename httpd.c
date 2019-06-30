@@ -3,9 +3,10 @@
 #include <string.h>
 #include <assert.h>
 
-int psend(int s, const char *buf, int len, int flags);
-int precv(int s, char *buf, int len, int flags);
-int pclosesocket(int s);
+struct httpinfo;
+int psend(struct httpinfo *s, const char *buf, int len, int flags);
+int precv(struct httpinfo *s, char *buf, int len, int flags);
+int pclosesocket(struct httpinfo *s);
 
 /*从文件名获取文件类型类型 */
 void gettype(const char *name, char *out)
@@ -23,7 +24,7 @@ void gettype(const char *name, char *out)
 }
 
 /*向客户端发送响应头 */
-void headers(int fd, const char *name)
+void headers(struct httpinfo *fd, const char *name)
 {
     char buf[1024];
     strcpy(buf, "HTTP/1.0 200 OK\r\n");
@@ -39,7 +40,7 @@ void headers(int fd, const char *name)
 }
 
 /*向客户端发送数据 */
-void sendbuff(int fd, const char *buf)
+void sendbuff(struct httpinfo *fd, const char *buf)
 {
     psend(fd, buf, strlen(buf), 0);
 }
@@ -107,7 +108,7 @@ void namefromurl(const char *Buffer, char *out)
 }
 
 /*send 404 */
-void not_found(int client)
+void not_found(struct httpinfo *client)
 {
     char buf[1024];
     sprintf(buf, "<HTML><TITLE>Not Found</TITLE>\r\n");
@@ -122,7 +123,7 @@ void not_found(int client)
     psend(client, buf, strlen(buf), 0);
 }
 /*拷贝文本文件 */
-void cattext(int client, FILE *resource)
+void cattext(struct httpinfo *client, FILE *resource)
 {
     char buf[1024];
     /* 从文件文件描述符中读取指定内容 */
@@ -134,15 +135,15 @@ void cattext(int client, FILE *resource)
     }
 }
 /*拷贝非文本文件 */
-void catfile(int client, FILE *resource)
+void catfile(struct httpinfo *client, FILE *resource)
 {
     char buf[1024];
     int rc;
-    while( (rc = fread(buf,sizeof(unsigned char), 1024,resource)) != 0 )
-        psend(client, buf, rc, 0); 
+    while ((rc = fread(buf, sizeof(unsigned char), 1024, resource)) != 0)
+        psend(client, buf, rc, 0);
 }
 /*向客户端发送一个文件 */
-void sendfile(int fd, const char *name)
+void sendfile(struct httpinfo *fd, const char *name)
 {
     char filename[300];
     filename[0] = 0;
@@ -172,7 +173,7 @@ void sendfile(int fd, const char *name)
 }
 
 /*处理来自客户端的信息 */
-void deal(int fd)
+void deal(struct httpinfo *fd)
 {
     char Buffer[8193];
     int recvlen = precv(fd, Buffer, 8192, 0);
@@ -200,22 +201,28 @@ int getport(void)
 #include <process.h>
 #pragma comment(lib, "Ws2_32.lib")
 
-int psend(int s, const char *buf, int len, int flags)
+struct httpinfo
 {
-    return send(s, buf, len, flags);
+    SOCKET fd;
+};
+
+int psend(struct httpinfo *s, const char *buf, int len, int flags)
+{
+    return send(s->fd, buf, len, flags);
 }
-int precv(int s, char *buf, int len, int flags)
+int precv(struct httpinfo *s, char *buf, int len, int flags)
 {
-    return recv(s, buf, len, flags);
+    return recv(s->fd, buf, len, flags);
 }
-int pclosesocket(int s)
+int pclosesocket(struct httpinfo *s)
 {
-    return closesocket(s);
+    return closesocket(s->fd);
 }
-static void FdHandler(void * lpCtx)
+static void FdHandler(void *lpCtx)
 {
-    int fd = (SOCKET)lpCtx;
+    struct httpinfo *fd = (struct httpinfo *)lpCtx;
     deal(fd);
+    free(fd);
     _endthread();
 }
 
@@ -254,8 +261,10 @@ int main()
     {
         bindhand = sizeof(SOCKADDR_IN);
         SOCKET fd = accept(lfd, (struct sockaddr *)&addr, &bindhand);
+        struct httpinfo *hi = (struct httpinfo *)malloc(sizeof(struct httpinfo));
+        hi->fd = fd;
         printf("from [%s:%d]\r\n", inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
-        _beginthread(FdHandler, 0,(void *)fd);
+        _beginthread(FdHandler, 0, (void *)hi);
     } while (1);
     WSACleanup();
     return 0;
@@ -275,21 +284,27 @@ int main()
 #include <pthread.h>
 #include <unistd.h>
 
-int psend(int s, const char *buf, int len, int flags)
+struct httpinfo
 {
-    return send(s, buf, len, flags);
+    int fd;
+};
+
+int psend(struct httpinfo *s, const char *buf, int len, int flags)
+{
+    return send(s->fd, buf, len, flags);
 }
-int precv(int s, char *buf, int len, int flags)
+int precv(struct httpinfo *s, char *buf, int len, int flags)
 {
-    return recv(s, buf, len, flags);
+    return recv(s->fd, buf, len, flags);
 }
-int pclosesocket(int s)
+int pclosesocket(struct httpinfo *s)
 {
-    return close(s);
+    return close(s->fd);
 }
-void * FdHandler(void * fd)
+void *FdHandler(void *fd)
 {
-    deal((long)fd);
+    deal(fd);
+    free(fd);
     pthread_detach(pthread_self());
 }
 
@@ -307,21 +322,24 @@ int main(void)
     name.sin_family = AF_INET;
     name.sin_port = htons(port);
     name.sin_addr.s_addr = htonl(INADDR_ANY);
-    if(bind(server_sock, (struct sockaddr *)&name, sizeof(name)) < 0)
+    if (bind(server_sock, (struct sockaddr *)&name, sizeof(name)) < 0)
     {
         printf("error:failed to bind:%d port\r\n", port);
         return -1;
-    }else
+    }
+    else
     {
         printf("httpd successful,port:%d\r\n", port);
     }
     listen(server_sock, 1970);
     while (1)
     {
-        client_sock = accept(server_sock,(struct sockaddr *)&client_name,
-                    &client_name_len);
+        client_sock = accept(server_sock, (struct sockaddr *)&client_name,
+                             &client_name_len);
         printf("from [%s:%d]\r\n", inet_ntoa(name.sin_addr), ntohs(name.sin_port));
-        pthread_create(&newthread, NULL,FdHandler,(void *)(long) client_sock);
+        struct httpinfo *hi = (struct httpinfo *)malloc(sizeof(struct httpinfo));
+        hi->fd = client_sock;
+        pthread_create(&newthread, NULL, FdHandler, (void *)hi);
     }
     return (0);
 }
