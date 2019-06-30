@@ -11,7 +11,7 @@ int pclosesocket(struct httpinfo *s);
 /*从文件名获取文件类型类型 */
 void gettype(const char *name, char *out)
 {
-    int len = strlen(name);
+    size_t len = strlen(name);
     switch (name[len - 1])
     {
     case 'l': /*html*/
@@ -72,8 +72,8 @@ unsigned char FromHex(unsigned char x)
 void UrlDecode(const char *str, char *out)
 {
     out[0] = 0;
-    int length = strlen(str);
-    int pos = 0;
+    size_t length = strlen(str);
+    size_t pos = 0;
     for (size_t i = 0; i < length; i++)
     {
         if (str[i] == '+')
@@ -94,9 +94,9 @@ void UrlDecode(const char *str, char *out)
 /*从url中获取文件名 */
 void namefromurl(const char *Buffer, char *out)
 {
-    int pos = 0;
-    int len = strlen(Buffer);
-    int i;
+    size_t pos = 0;
+    size_t len = strlen(Buffer);
+    size_t i;
     char be[200];
     for (i = 1; i < len; ++i)
         if (Buffer[i] != '?')
@@ -138,7 +138,7 @@ void cattext(struct httpinfo *client, FILE *resource)
 void catfile(struct httpinfo *client, FILE *resource)
 {
     char buf[1024];
-    int rc;
+    size_t rc;
     while ((rc = fread(buf, sizeof(unsigned char), 1024, resource)) != 0)
         psend(client, buf, rc, 0);
 }
@@ -230,7 +230,7 @@ int main()
 {
     WORD wVersionRequested;
     WSADATA wsaData;
-    int port = getport();
+    u_short port = getport();
     int err;
     SOCKADDR_IN addr;
     int bindhand;
